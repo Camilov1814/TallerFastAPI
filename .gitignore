@@ -3,3 +3,4 @@ venv/
 # Ignore compiled Python files
 *.pyc
 .env
+*.sh
