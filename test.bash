@@ -25,7 +25,13 @@ response=$(curl -s -X 'GET' 'http://127.0.0.1:8000/stocks/?page=100&limit=5')
 echo "Respuesta: $response"
 echo " "
 
-# Validar consulta de acciones con paginación incorrecta
+# Validar consulta de acciones con más paginas de las que hay
 echo "Probando consulta con paginación incorrecta..."
 response=$(curl -s -X 'GET' 'http://127.0.0.1:8000/stocks/?page=2086&limit=5')
+echo "Respuesta: $response"
+echo " "
+
+# Validar consulta de acciones con paginación incorrecta
+echo "Probando consulta con paginación incorrecta..."
+response=$(curl -s -X 'GET' 'http://127.0.0.1:8000/stocks/?page=-1&limit=0')
 echo "Respuesta: $response"
