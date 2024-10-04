@@ -1,6 +1,6 @@
 # Taller Sistemas Operativos
 
-## Punto 1 || Dataset elegidos.
+## Punto 1 || Dataset elegido.
 Elegimos el siguiente set de datos el cual tiene un registro histórico desde 1980 del valor en el mercado de las acciones de Apple.
 https://www.kaggle.com/datasets/varpit94/apple-stock-data-updated-till-22jun2021
 
