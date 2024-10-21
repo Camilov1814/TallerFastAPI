@@ -7,7 +7,14 @@ from datetime import date
 import models 
 from database import SessionLocal, engine
 from sqlalchemy.orm import Session
+import boto3
+import json
+from botocore.exceptions import NoCredentialsError
+import os
+from datetime import datetime
 
+# from sqlalchemy.exc import IntegrityError
+ 
 
 
 app = FastAPI()
@@ -86,24 +93,33 @@ async def get_stocks(
     return stocks
 
 
+def date_converter(o):
+    if isinstance(o, date):
+        return o.isoformat()
+    raise TypeError(f"Type {o} not serializable")
 
-# Endpoint POST para crear datos de acciones
+## Método POST para agregar datos a la base de datos y subir a S3
 #############################################################################################
+s3 = boto3.client('s3', aws_access_key_id=os.getenv("ACCESS_KEY"), aws_secret_access_key=os.getenv("SECRET_ACCESS_KEY"), region_name=os.getenv("REGION"))
+
+BUCKET_NAME = os.getenv("OUR_BUCKET_NAME")
+
 @app.post("/stocks/")
-async def create_stock_data(stock_data: list[StockData]):#BaseModel Pydantic
+async def create_stock_data(stock_data: list[StockData]):
     db = SessionLocal()
     created_count = 0
+    stock_entries = []  # Lista para almacenar los registros que se agregarán al bucket
 
     for stock in stock_data:
         # Verificar si ya existe una acción con la misma fecha
         existing_stock = db.query(models.StockData).filter(models.StockData.date == stock.date).first()
         if existing_stock:
             raise HTTPException(
-                status_code=409,  # Código de estado HTTP 409 Conflict
-                detail=f"La acción con la fecha {stock.date} ya existe en la base de datos Se agregaron {created_count} elementos a la base de datos.",
+                status_code=409,
+                detail=f"La acción con la fecha {stock.date} ya existe en la base de datos. Se agregaron {created_count} elementos a la base de datos.",
             )
 
-        # Creación de un objeto de la clase StockData
+        # Crear un objeto de la clase StockData
         stock_entry = models.StockData(
             close=stock.close,
             low=stock.low,
@@ -117,9 +133,34 @@ async def create_stock_data(stock_data: list[StockData]):#BaseModel Pydantic
             db.add(stock_entry)
             db.commit()
             created_count += 1
+            # Convertir date a cadena ISO antes de subir a S3
+            stock_dict = stock.model_dump()
+            stock_dict['date'] = stock_dict['date'].isoformat()  # Convertir la fecha a string
+            stock_entries.append(stock_dict)
+
+            # Agregar a la lista para subir a S3
+            stock_entries.append(stock.model_dump())  # Usamos dict() para convertir a JSON-friendly
+
         except IntegrityError:
             db.rollback()  # Deshacer cambios en caso de error
             continue
+
+    # Subir el archivo JSON a S3
+    if stock_entries:
+        file_name = f"stocks_{stock.date}.json"
+        try:
+            response = s3.put_object(
+                Bucket=BUCKET_NAME,
+                Key=file_name,
+                Body = json.dumps(stock_entries, default=date_converter),
+                ContentType='application/json'
+            )        
+            if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                print(f"El archivo {file_name} se subió correctamente a {BUCKET_NAME}.")
+            else:
+                raise HTTPException(status_code=500, detail="No se pudo subir el archivo a S3.")
+        except NoCredentialsError:
+            raise HTTPException(status_code=500, detail="Error de credenciales de AWS.")        
 
     total_count = db.query(models.StockData).count()  # Total de registros en la base de datos
     db.close()
